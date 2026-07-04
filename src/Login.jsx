@@ -18,7 +18,7 @@ export default function Login() {
     e.preventDefault();
     
     try {
-      const respuesta = await fetch('https://senafim-api.onrender.com', {
+      const respuesta = await fetch('https://senafim-api.onrender.com/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ correo, password })
