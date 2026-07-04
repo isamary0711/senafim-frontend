@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Landing from './Landing';
-import Login from './Login';
+import login from './login';
 import DashboardInspector from './DashboardInspector';
 import DashboardSupervisor from './DashboardSupervisor';
 import DashboardOperador from './DashboardOperador'; // <-- IMPORTA AQUÍ
