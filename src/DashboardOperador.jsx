@@ -58,7 +58,8 @@ export default function DashboardOperador() {
     setCargandoHistorial(true);
     try {
       const token = localStorage.getItem('token');
-      const respuesta = await fetch('https://senafim-api.onrender.com/api/auth/login', {
+      // CORRECCIÓN APLICADA: Ahora apunta a /api/pesajes
+      const respuesta = await fetch('https://senafim-api.onrender.com/api/pesajes', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const datos = await respuesta.json();
@@ -100,7 +101,8 @@ export default function DashboardOperador() {
         registro_fotografico_url: ''
       };
 
-      const respuesta = await fetch('https://senafim-api.onrender.com/api/auth/login', {
+      // CORRECCIÓN APLICADA: Ahora apunta a /api/pesajes
+      const respuesta = await fetch('https://senafim-api.onrender.com/api/pesajes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
