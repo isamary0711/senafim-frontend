@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, ShieldCheck, LogOut, Clock, Menu, X, TrendingUp, Truck, Database, Search, Download, Calendar, Scale } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export default function DashboardSupervisor() {
   const navigate = useNavigate();
@@ -48,10 +49,7 @@ export default function DashboardSupervisor() {
       });
       
       const datos = await respuesta.json();
-      
-      if (respuesta.ok) {
-        setHistorialGlobal(datos);
-      }
+      if (respuesta.ok) setHistorialGlobal(datos);
     } catch (error) {
       console.error('Error cargando auditoría:', error);
     } finally {
@@ -63,7 +61,6 @@ export default function DashboardSupervisor() {
     const hoy = new Date();
     const hoyISO = hoy.toISOString().split('T')[0]; 
     const mesActual = hoyISO.substring(0, 7); 
-    
     const hace7Dias = new Date();
     hace7Dias.setDate(hoy.getDate() - 7);
     const hace7DiasISO = hace7Dias.toISOString().split('T')[0];
@@ -71,19 +68,36 @@ export default function DashboardSupervisor() {
     return datos.filter(item => {
       if (!item.fecha_registro) return false;
       const fechaRegistro = item.fecha_registro.split('T')[0]; 
-
       switch (filtro) {
-        case 'diario':
-          return fechaRegistro === hoyISO;
-        case 'semanal':
-          return fechaRegistro >= hace7DiasISO && fechaRegistro <= hoyISO;
-        case 'mensual':
-          return fechaRegistro.startsWith(mesActual);
-        case 'historico':
-        default:
-          return true;
+        case 'diario': return fechaRegistro === hoyISO;
+        case 'semanal': return fechaRegistro >= hace7DiasISO && fechaRegistro <= hoyISO;
+        case 'mensual': return fechaRegistro.startsWith(mesActual);
+        default: return true;
       }
     });
+  };
+
+  const exportarExcel = () => {
+    const datosParaExportar = filtrarDatosPorTiempo(historialGlobal, filtroTiempo);
+    if (datosParaExportar.length === 0) {
+      alert("No hay datos para exportar.");
+      return;
+    }
+
+    const datosFormateados = datosParaExportar.map(item => ({
+      "TICKET": item.consecutivo_ticket,
+      "FECHA": item.fecha_registro?.split('T')[0],
+      "HORA": item.hora_registro?.substring(0, 5),
+      "PLACA": item.placa,
+      "MINA": item.mina,
+      "COMPRADOR": item.comprador,
+      "PESO NETO (KG)": parseFloat(item.peso_neto_kg || 0)
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(datosFormateados);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte");
+    XLSX.writeFile(workbook, `Reporte_SENAFIM_${filtroTiempo}.xlsx`);
   };
 
   const calcularKPIs = (datos) => {
@@ -91,39 +105,7 @@ export default function DashboardSupervisor() {
     const totalKg = datos.reduce((acc, curr) => acc + parseFloat(curr.peso_neto_kg || 0), 0);
     const totalToneladas = totalKg / 1000;
     const promedio = totalViajes > 0 ? (totalToneladas / totalViajes) : 0;
-
-    setMetricas({
-      totalViajes,
-      totalToneladas: totalToneladas.toFixed(2),
-      promedioCarga: promedio.toFixed(2)
-    });
-  };
-
-  const exportarExcel = () => {
-    const datosFiltrados = filtrarDatosPorTiempo(historialGlobal, filtroTiempo);
-    
-    if (datosFiltrados.length === 0) {
-      alert("No hay datos en este periodo para exportar.");
-      return;
-    }
-
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "TICKET,FECHA,HORA,PLACA,CHOFER,MINA,COMPRADOR,PESO BRUTO(KG),TARA(KG),PESO NETO(KG)\n";
-
-    datosFiltrados.forEach(row => {
-      const fecha = row.fecha_registro ? row.fecha_registro.split('T')[0] : 'N/A';
-      const hora = row.hora_registro ? row.hora_registro.substring(0, 5) : 'N/A';
-      const linea = `${row.consecutivo_ticket},${fecha},${hora},${row.placa},${row.chofer || 'N/A'},"${row.mina || ''}","${row.comprador || ''}",${row.peso_bruto_kg || 0},${row.peso_tara_kg || 0},${row.peso_neto_kg || 0}`;
-      csvContent += linea + "\n";
-    });
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Reporte_Pesajes_${filtroTiempo.toUpperCase()}_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    setMetricas({ totalViajes, totalToneladas: totalToneladas.toFixed(2), promedioCarga: promedio.toFixed(2) });
   };
 
   const handleCerrarSesion = () => {
@@ -138,246 +120,78 @@ export default function DashboardSupervisor() {
   );
 
   return (
-    <div className="min-h-screen bg-[#050B14] font-sans text-slate-300 flex overflow-hidden selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#050B14] font-sans text-slate-300 flex overflow-hidden">
+      {menuAbierto && <div className="fixed inset-0 bg-black/60 z-30 lg:hidden backdrop-blur-sm" onClick={() => setMenuAbierto(false)} />}
       
-      {/* OVERLAY MÓVIL */}
-      {menuAbierto && (
-        <div className="fixed inset-0 bg-black/60 z-30 lg:hidden backdrop-blur-sm transition-opacity" onClick={() => setMenuAbierto(false)} />
-      )}
-
-      {/* BARRA LATERAL */}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#0A162C]/95 backdrop-blur-xl border-r border-indigo-900/30 flex flex-col shadow-2xl transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${menuAbierto ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-4 lg:p-6 border-b border-indigo-900/30 flex justify-between items-center lg:justify-center">
-          <img src="/assets/senafim-logo-blanco.png" alt="SENAFIM" className="h-8 lg:h-10 object-contain" />
-          <button className="lg:hidden text-slate-400 hover:text-white bg-white/5 p-1.5 rounded-lg" onClick={() => setMenuAbierto(false)}>
-            <X className="w-5 h-5" />
-          </button>
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#0A162C]/95 backdrop-blur-xl border-r border-indigo-900/30 flex flex-col shadow-2xl transition-transform lg:translate-x-0 ${menuAbierto ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 border-b border-indigo-900/30 flex justify-between items-center">
+          <img src="/assets/senafim-logo-blanco.png" alt="SENAFIM" className="h-8" />
+          <button className="lg:hidden text-slate-400" onClick={() => setMenuAbierto(false)}><X className="w-5 h-5" /></button>
         </div>
-        
-        <div className="p-4 flex-1 space-y-2 mt-2 overflow-y-auto custom-scrollbar">
-          <div className="text-[10px] font-bold text-indigo-500/70 uppercase tracking-widest mb-4 px-4">Panel Gerencial</div>
-          <button onClick={() => { setVistaActiva('panel'); setMenuAbierto(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${vistaActiva === 'panel' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/5 hover:text-indigo-400'}`}>
+        <div className="p-4 flex-1 space-y-2">
+          <button onClick={() => setVistaActiva('panel')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl ${vistaActiva === 'panel' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>
             <LayoutDashboard className="w-5 h-5" /> <span>Métricas (KPIs)</span>
           </button>
-          <button onClick={() => { setVistaActiva('auditoria'); setMenuAbierto(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${vistaActiva === 'auditoria' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'text-slate-400 hover:bg-white/5 hover:text-indigo-400'}`}>
-            <ShieldCheck className="w-5 h-5" /> <span>Auditoría de Pesajes</span>
+          <button onClick={() => setVistaActiva('auditoria')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl ${vistaActiva === 'auditoria' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>
+            <ShieldCheck className="w-5 h-5" /> <span>Auditoría</span>
           </button>
         </div>
-
-        <div className="p-4 lg:p-6 border-t border-indigo-900/30">
-          <button onClick={handleCerrarSesion} className="w-full flex items-center justify-center space-x-2 bg-red-500/10 text-red-400 py-2.5 rounded-lg border border-red-500/20 hover:bg-red-500/20 transition-colors">
-            <LogOut className="w-4 h-4" /> <span>Cerrar Sesión</span>
-          </button>
-        </div>
+        <div className="p-4"><button onClick={handleCerrarSesion} className="w-full flex items-center justify-center space-x-2 bg-red-500/10 text-red-400 py-2.5 rounded-lg border border-red-500/20"><LogOut className="w-4 h-4" /> <span>Salir</span></button></div>
       </aside>
 
-      <main className="flex-1 flex flex-col relative z-10 h-screen overflow-hidden w-full">
-        {/* CABECERA RESPONSIVE */}
-        <header className="h-16 lg:h-20 bg-[#050B14]/80 backdrop-blur-md border-b border-indigo-900/30 flex justify-between items-center px-4 lg:px-8 shrink-0">
-          <div className="flex items-center">
-            <button className="mr-3 text-slate-300 hover:text-white lg:hidden bg-white/5 p-1.5 rounded-lg" onClick={() => setMenuAbierto(true)}>
-              <Menu className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-sm lg:text-xl font-bold text-white tracking-tight uppercase truncate">Módulo Supervisor</h1>
-              <p className="text-[10px] lg:text-xs text-indigo-400 font-mono hidden sm:block">Nivel de Acceso: ADMINISTRATIVO</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2 bg-indigo-900/20 border border-indigo-500/20 px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg shrink-0">
-            <Clock className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-indigo-400" />
-            <span className="text-xs lg:text-sm font-mono text-indigo-100">{fechaActual.toLocaleTimeString()}</span>
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        <header className="h-16 bg-[#050B14]/80 border-b border-indigo-900/30 flex justify-between items-center px-8">
+          <h1 className="text-xl font-bold text-white uppercase">Módulo Supervisor</h1>
+          <div className="flex items-center space-x-2 bg-indigo-900/20 border border-indigo-500/20 px-4 py-2 rounded-lg">
+            <Clock className="w-4 h-4 text-indigo-400" />
+            <span className="font-mono text-indigo-100">{fechaActual.toLocaleTimeString()}</span>
           </div>
         </header>
 
-        <div className="flex-1 p-4 lg:p-8 overflow-y-auto custom-scrollbar">
-          
-          {vistaActiva === 'panel' && (
-            <div className="space-y-6 lg:space-y-8 h-full animate-fade-in">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 lg:gap-0">
-                <div>
-                  <h2 className="text-xl lg:text-2xl font-bold text-white">Resumen Operativo</h2>
-                  <p className="text-slate-400 text-xs lg:text-sm">Filtra las métricas y exporta reportes financieros.</p>
-                </div>
-                
-                {/* CONTROLES DE REPORTE Y FILTRO (CORREGIDOS PARA MÓVIL) */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto mt-2 lg:mt-0">
-                  <div className="flex items-center bg-[#0A162C] border border-indigo-500/30 rounded-lg p-1 w-full sm:w-auto justify-center">
-                    <Calendar className="w-4 h-4 text-indigo-400 ml-2" />
-                    <select 
-                      value={filtroTiempo} 
-                      onChange={(e) => setFiltroTiempo(e.target.value)}
-                      className="bg-transparent text-white text-sm outline-none px-3 py-1.5 cursor-pointer w-full text-center"
-                    >
-                      <option value="diario">Hoy (Diario)</option>
-                      <option value="semanal">Últimos 7 Días</option>
-                      <option value="mensual">Mes Actual</option>
-                      <option value="historico">Histórico Total</option>
-                    </select>
-                  </div>
-
-                  <div className="flex gap-2 w-full sm:w-auto">
-                    <button onClick={exportarExcel} className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 lg:py-2 rounded-lg text-sm transition-colors flex items-center justify-center shadow-lg shadow-emerald-900/20 border border-emerald-500 whitespace-nowrap">
-                      <Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Exportar</span>
-                    </button>
-                    
-                    <button onClick={cargarDatosGlobales} className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 lg:py-2 rounded-lg text-sm transition-colors flex items-center justify-center shadow-lg shadow-indigo-900/50">
-                      Actualizar
-                    </button>
-                  </div>
+        <div className="flex-1 p-8 overflow-y-auto">
+          {vistaActiva === 'panel' ? (
+            <div className="space-y-8 animate-fade-in">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-white">Resumen Operativo</h2>
+                <div className="flex gap-3">
+                  <select value={filtroTiempo} onChange={(e) => setFiltroTiempo(e.target.value)} className="bg-[#0A162C] border border-indigo-500/30 text-white rounded-lg px-3 py-2 cursor-pointer">
+                    <option value="diario">Hoy</option>
+                    <option value="semanal">Últimos 7 Días</option>
+                    <option value="mensual">Mes Actual</option>
+                    <option value="historico">Histórico</option>
+                  </select>
+                  <button onClick={exportarExcel} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Download size={18} /> Exportar</button>
                 </div>
               </div>
-
-              {/* TARJETAS KPI */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 lg:gap-6">
-                <div className="bg-gradient-to-br from-indigo-900/40 to-[#0A162C] border border-indigo-500/30 p-5 lg:p-6 rounded-2xl shadow-xl relative overflow-hidden transition-all">
-                  <div className="absolute -right-4 -top-4 opacity-10"><Database className="w-24 h-24 lg:w-32 lg:h-32 text-indigo-400" /></div>
-                  <div className="flex items-center space-x-3 mb-2 relative z-10">
-                    <div className="p-1.5 lg:p-2 bg-indigo-500/20 rounded-lg"><TrendingUp className="w-4 h-4 lg:w-5 lg:h-5 text-indigo-400" /></div>
-                    <h3 className="text-[10px] lg:text-sm font-bold text-slate-300 uppercase tracking-wider">Volumen Extraído</h3>
-                  </div>
-                  <div className="mt-2 lg:mt-4 relative z-10 flex items-baseline space-x-2">
-                    <span className="text-3xl lg:text-5xl font-black text-white">{metricas.totalToneladas}</span>
-                    <span className="text-indigo-400 font-bold text-xs lg:text-base">Ton</span>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-br from-blue-900/40 to-[#0A162C] border border-blue-500/30 p-5 lg:p-6 rounded-2xl shadow-xl relative overflow-hidden transition-all">
-                  <div className="absolute -right-4 -top-4 opacity-10"><Truck className="w-24 h-24 lg:w-32 lg:h-32 text-blue-400" /></div>
-                  <div className="flex items-center space-x-3 mb-2 relative z-10">
-                    <div className="p-1.5 lg:p-2 bg-blue-500/20 rounded-lg"><Truck className="w-4 h-4 lg:w-5 lg:h-5 text-blue-400" /></div>
-                    <h3 className="text-[10px] lg:text-sm font-bold text-slate-300 uppercase tracking-wider">Total de Viajes</h3>
-                  </div>
-                  <div className="mt-2 lg:mt-4 relative z-10 flex items-baseline space-x-2">
-                    <span className="text-3xl lg:text-5xl font-black text-white">{metricas.totalViajes}</span>
-                    <span className="text-blue-400 font-bold text-xs lg:text-base">Tickets</span>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-br from-emerald-900/40 to-[#0A162C] border border-emerald-500/30 p-5 lg:p-6 rounded-2xl shadow-xl relative overflow-hidden transition-all sm:col-span-2 md:col-span-1">
-                  <div className="absolute -right-4 -top-4 opacity-10"><ShieldCheck className="w-24 h-24 lg:w-32 lg:h-32 text-emerald-400" /></div>
-                  <div className="flex items-center space-x-3 mb-2 relative z-10">
-                    <div className="p-1.5 lg:p-2 bg-emerald-500/20 rounded-lg"><Scale className="w-4 h-4 lg:w-5 lg:h-5 text-emerald-400" /></div>
-                    <h3 className="text-[10px] lg:text-sm font-bold text-slate-300 uppercase tracking-wider">Promedio / Carga</h3>
-                  </div>
-                  <div className="mt-2 lg:mt-4 relative z-10 flex items-baseline space-x-2">
-                    <span className="text-3xl lg:text-5xl font-black text-white">{metricas.promedioCarga}</span>
-                    <span className="text-emerald-400 font-bold text-xs lg:text-base">Ton/Viaje</span>
-                  </div>
-                </div>
+              <div className="grid grid-cols-3 gap-6">
+                <div className="bg-indigo-900/20 border border-indigo-500/30 p-6 rounded-2xl"><h3 className="text-slate-400">Total Toneladas</h3><p className="text-5xl font-black text-white">{metricas.totalToneladas}</p></div>
+                <div className="bg-blue-900/20 border border-blue-500/30 p-6 rounded-2xl"><h3 className="text-slate-400">Total Viajes</h3><p className="text-5xl font-black text-white">{metricas.totalViajes}</p></div>
+                <div className="bg-emerald-900/20 border border-emerald-500/30 p-6 rounded-2xl"><h3 className="text-slate-400">Promedio/Carga</h3><p className="text-5xl font-black text-white">{metricas.promedioCarga}</p></div>
               </div>
-
-              {/* VISTA PREVIA TABLA */}
-              <div className="bg-[#0A162C]/80 border border-white/5 rounded-2xl p-4 lg:p-6 shadow-2xl mt-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-sm lg:text-lg font-bold text-white flex items-center">Vista Previa</h3>
-                  <span className="text-[10px] lg:text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20 uppercase">
-                    {filtroTiempo}
-                  </span>
-                </div>
-                
-                {cargando ? (
-                   <div className="text-center py-6 text-slate-400 animate-pulse text-xs lg:text-sm">Cargando métricas...</div>
-                ) : (
-                  <div className="overflow-x-auto custom-scrollbar pb-2">
-                    <table className="w-full text-left border-collapse min-w-[600px]">
-                      <thead>
-                        <tr className="text-[10px] lg:text-xs uppercase tracking-widest text-slate-500 border-b border-white/10">
-                          <th className="pb-3 font-semibold">Fecha/Hora</th>
-                          <th className="pb-3 font-semibold">Ticket</th>
-                          <th className="pb-3 font-semibold">Placa</th>
-                          <th className="pb-3 font-semibold">Mina Origen</th>
-                          <th className="pb-3 font-semibold text-right">Peso Neto</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {filtrarDatosPorTiempo(historialGlobal, filtroTiempo).slice(0, 5).map((pesaje) => (
-                          <tr key={pesaje.id_registro} className="text-xs lg:text-sm">
-                            <td className="py-3 text-slate-400">{pesaje.fecha_registro?.substring(0, 10)}</td>
-                            <td className="py-3 font-mono text-indigo-400">#{pesaje.consecutivo_ticket}</td>
-                            <td className="py-3 font-bold text-white">{pesaje.placa}</td>
-                            <td className="py-3 text-slate-400">{pesaje.mina}</td>
-                            <td className="py-3 font-mono font-bold text-emerald-400 text-right">{parseFloat(pesaje.peso_neto_kg).toLocaleString()} KG</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {filtrarDatosPorTiempo(historialGlobal, filtroTiempo).length === 0 && (
-                      <div className="text-center py-4 text-slate-500 text-xs lg:text-sm">No hay registros en este periodo.</div>
-                    )}
-                  </div>
-                )}
+            </div>
+          ) : (
+            <div className="bg-[#0A162C]/80 border border-white/10 rounded-2xl p-8 shadow-2xl h-full flex flex-col">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">Centro de Auditoría</h2>
+                <input type="text" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="bg-[#050B14] border border-white/10 text-white rounded-lg px-4 py-2" />
+              </div>
+              <div className="overflow-x-auto flex-1">
+                <table className="w-full text-left">
+                  <thead><tr className="text-indigo-300 border-b border-indigo-900/30 uppercase text-xs">
+                    <th className="p-4">Ticket</th><th className="p-4">Fecha</th><th className="p-4">Placa</th><th className="p-4 text-right">Neto (Kg)</th>
+                  </tr></thead>
+                  <tbody>{datosBusqueda.map((item) => (
+                    <tr key={item.id_registro} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="p-4 font-bold text-indigo-400">#{item.consecutivo_ticket}</td>
+                      <td className="p-4 text-slate-400">{item.fecha_registro?.substring(0, 10)}</td>
+                      <td className="p-4 font-bold text-white">{item.placa}</td>
+                      <td className="p-4 text-right text-emerald-400">{parseFloat(item.peso_neto_kg).toLocaleString()}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
               </div>
             </div>
           )}
-
-          {/* VISTA 2: AUDITORÍA GENERAL */}
-          {vistaActiva === 'auditoria' && (
-            <div className="bg-[#0A162C]/80 border border-white/10 rounded-2xl lg:rounded-[2rem] p-4 lg:p-8 shadow-2xl relative animate-fade-in h-full flex flex-col">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-2xl lg:rounded-t-[2rem]"></div>
-              
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
-                <div>
-                  <h2 className="text-xl lg:text-2xl font-bold text-white flex items-center">
-                    <ShieldCheck className="w-5 h-5 lg:w-6 lg:h-6 mr-2 lg:mr-3 text-indigo-500" /> Centro de Auditoría
-                  </h2>
-                  <p className="text-xs lg:text-sm text-slate-400 mt-1">Inspección de todos los registros históricos del sistema.</p>
-                </div>
-
-                <div className="w-full lg:w-auto relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Buscar placa o ticket..." 
-                    value={busqueda}
-                    onChange={(e) => setBusqueda(e.target.value)}
-                    className="w-full lg:w-64 bg-[#050B14] border border-white/10 text-white text-sm rounded-lg pl-9 pr-4 py-2.5 lg:py-2 outline-none focus:border-indigo-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {cargando ? (
-                <div className="text-center py-10 text-slate-400 animate-pulse text-xs lg:text-base">Sincronizando con base de datos...</div>
-              ) : datosBusqueda.length === 0 ? (
-                <div className="text-center py-10 text-slate-500 text-xs lg:text-base">No se encontraron registros para la búsqueda.</div>
-              ) : (
-                <div className="overflow-x-auto rounded-xl border border-white/5 flex-1 custom-scrollbar">
-                  <table className="w-full text-left border-collapse min-w-[700px]">
-                    <thead className="sticky top-0 bg-[#050B14] z-10">
-                      <tr className="text-[10px] lg:text-xs uppercase tracking-widest text-indigo-300/70 border-b border-indigo-900/30">
-                        <th className="p-3 lg:p-4 font-semibold whitespace-nowrap">Ticket</th>
-                        <th className="p-3 lg:p-4 font-semibold">Fecha/Hora</th>
-                        <th className="p-3 lg:p-4 font-semibold">Placa</th>
-                        <th className="p-3 lg:p-4 font-semibold whitespace-nowrap">Guía</th>
-                        <th className="p-3 lg:p-4 font-semibold">Origen / Destino</th>
-                        <th className="p-3 lg:p-4 font-semibold text-right text-emerald-400 whitespace-nowrap">Neto (Kg)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {datosBusqueda.map((pesaje) => (
-                        <tr key={pesaje.id_registro} className="hover:bg-white/5 transition-colors text-xs lg:text-sm">
-                          <td className="p-3 lg:p-4 font-mono font-bold text-indigo-400">#{pesaje.consecutivo_ticket}</td>
-                          <td className="p-3 lg:p-4 text-slate-400">
-                            <div className="font-medium text-slate-300">{pesaje.fecha_registro?.substring(0, 10)}</div>
-                            <div className="text-[10px]">{pesaje.hora_registro?.substring(0, 5)}</div>
-                          </td>
-                          <td className="p-3 lg:p-4 font-bold text-white whitespace-nowrap">{pesaje.placa}</td>
-                          <td className="p-3 lg:p-4 font-mono text-slate-400">{pesaje.numero_guia}</td>
-                          <td className="p-3 lg:p-4">
-                            <div className="text-slate-300 truncate max-w-[150px] lg:max-w-[200px]">{pesaje.mina}</div>
-                            <div className="text-[10px] text-slate-500 truncate max-w-[150px] lg:max-w-[200px]">{pesaje.comprador}</div>
-                          </td>
-                          <td className="p-3 lg:p-4 font-mono font-bold text-emerald-400 text-right">
-                            {parseFloat(pesaje.peso_neto_kg).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
         </div>
       </main>
     </div>
