@@ -123,8 +123,8 @@ export default function Landing() {
     };
 
     try {
-      // Disparamos la petición a Neon a través de Node.js
-      const respuesta = await fetch('http://127.0.0.1:3000/api/vacantes/postular', {
+      // CORRECCIÓN: Apuntando al servidor de producción en Render
+      const respuesta = await fetch('https://senafim-api.onrender.com/api/vacantes/postular', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datosFormulario)
