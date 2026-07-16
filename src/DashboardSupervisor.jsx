@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, ShieldCheck, LogOut, Clock, Menu, X, Search, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+// ================================================================
+// CONFIGURACIÓN DEL SISTEMA DE CACHÉ (TTL: 5 MINUTOS)
+// ================================================================
+const CACHE_KEY = 'senafim_pesajes_data';
+const CACHE_TIMESTAMP_KEY = 'senafim_pesajes_timestamp';
+const TTL_MINUTOS = 5;
+
 export default function DashboardSupervisor() {
   const navigate = useNavigate();
   
@@ -27,7 +34,8 @@ export default function DashboardSupervisor() {
   }, []);
 
   useEffect(() => {
-    cargarDatosGlobales();
+    // Carga inicial respetando la caché si es válida
+    cargarDatosGlobales(false);
   }, []);
 
   useEffect(() => {
@@ -35,18 +43,45 @@ export default function DashboardSupervisor() {
     calcularKPIs(datosFiltrados);
   }, [historialGlobal, filtroTiempo]);
 
-  const cargarDatosGlobales = async () => {
+  // === FUNCIÓN ACTUALIZADA CON CACHÉ INTEGRADAS ===
+  const cargarDatosGlobales = async (forzarActualizacion = false) => {
     setCargando(true);
     try {
       const token = localStorage.getItem('token');
       if (!token) return navigate('/');
 
+      // 1. Lectura de caché local si no se fuerza la actualización
+      if (!forzarActualizacion) {
+        const datosGuardados = localStorage.getItem(CACHE_KEY);
+        const timestampGuardado = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+
+        if (datosGuardados && timestampGuardado) {
+          const ahora = new Date().getTime();
+          const tiempoLimite = parseInt(timestampGuardado) + (TTL_MINUTOS * 60 * 1000);
+
+          if (ahora <= tiempoLimite) {
+            console.log("⚡ [CACHE HIT] Cargando pesajes desde almacenamiento local.");
+            setHistorialGlobal(JSON.parse(datosGuardados));
+            setCargando(false);
+            return; 
+          }
+        }
+      }
+
+      // 2. Cache Miss o Actualización forzada (Petición a la red)
+      console.log("🌐 [CACHE MISS] Solicitando datos frescos al servidor.");
       const respuesta = await fetch('https://senafim-api.onrender.com/api/pesajes', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       const datos = await respuesta.json();
-      if (respuesta.ok) setHistorialGlobal(datos);
+      if (respuesta.ok) {
+        setHistorialGlobal(datos);
+        
+        // 3. Guardar nueva data en caché
+        localStorage.setItem(CACHE_KEY, JSON.stringify(datos));
+        localStorage.setItem(CACHE_TIMESTAMP_KEY, new Date().getTime().toString());
+      }
     } catch (error) {
       console.error('Error cargando auditoría:', error);
     } finally {
@@ -103,6 +138,9 @@ export default function DashboardSupervisor() {
   };
 
   const handleCerrarSesion = () => {
+    // Se borra la caché por seguridad al cerrar sesión
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(CACHE_TIMESTAMP_KEY);
     localStorage.removeItem('token');
     navigate('/');
   };
@@ -112,7 +150,6 @@ export default function DashboardSupervisor() {
     item.consecutivo_ticket?.toString().includes(busqueda)
   );
 
-  // Contenido del menú para no repetir código
   const ContenidoMenu = () => (
     <>
       <div className="p-6 border-b border-indigo-900/30 flex justify-between items-center">
@@ -138,30 +175,23 @@ export default function DashboardSupervisor() {
   );
 
   return (
-    // ESTRUCTURA INFALIBLE: Flexbox puro, 100vh de alto, 100vw de ancho.
     <div className="flex h-screen w-full bg-[#050B14] font-sans text-slate-300 overflow-hidden">
       
-      {/* 1. SIDEBAR MÓVIL (Completamente independiente, solo existe si menuAbierto es true) */}
       {menuAbierto && (
         <div className="fixed inset-0 z-50 lg:hidden flex">
-          {/* Fondo oscuro que cierra el menú al hacer clic */}
           <div className="fixed inset-0 bg-black/70" onClick={() => setMenuAbierto(false)}></div>
-          {/* Panel lateral móvil */}
           <aside className="relative w-64 h-full bg-[#0A162C] flex flex-col shadow-2xl">
             <ContenidoMenu />
           </aside>
         </div>
       )}
 
-      {/* 2. SIDEBAR COMPUTADORA (Siempre fijo a la izquierda, no se superpone) */}
       <aside className="hidden lg:flex flex-col w-64 h-full bg-[#0A162C] border-r border-indigo-900/30 shrink-0">
         <ContenidoMenu />
       </aside>
 
-      {/* 3. CONTENIDO PRINCIPAL (Ocupa el resto del espacio disponible) */}
       <main className="flex-1 flex flex-col h-full min-w-0">
         
-        {/* Cabecera */}
         <header className="h-16 shrink-0 bg-[#050B14] border-b border-indigo-900/30 flex justify-between items-center px-4 md:px-8">
           <div className="flex items-center gap-3">
             <button className="lg:hidden text-white bg-white/5 p-1.5 rounded-lg" onClick={() => setMenuAbierto(true)}>
@@ -175,7 +205,6 @@ export default function DashboardSupervisor() {
           </div>
         </header>
 
-        {/* Cuerpo con scroll propio */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {vistaActiva === 'panel' ? (
             <div className="space-y-6 md:space-y-8">
@@ -188,8 +217,14 @@ export default function DashboardSupervisor() {
                     <option value="mensual">Mes Actual</option>
                     <option value="historico">Histórico</option>
                   </select>
+                  
                   <button onClick={exportarExcel} className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg flex items-center justify-center gap-2">
                     <Download size={16} /> <span className="hidden sm:inline">Exportar</span>
+                  </button>
+                  
+                  {/* Botón Actualizar (Fuerza carga ignorando caché) */}
+                  <button onClick={() => cargarDatosGlobales(true)} className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                    Actualizar
                   </button>
                 </div>
               </div>
@@ -236,7 +271,11 @@ export default function DashboardSupervisor() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {datosBusqueda.length > 0 ? (
+                    {cargando ? (
+                      <tr>
+                        <td colSpan="4" className="p-8 text-center text-slate-400 animate-pulse">Sincronizando registros logísticos...</td>
+                      </tr>
+                    ) : datosBusqueda.length > 0 ? (
                       datosBusqueda.map((item) => (
                         <tr key={item.id_registro} className="hover:bg-white/5 text-xs md:text-sm">
                           <td className="p-4 font-mono font-bold text-indigo-400">#{item.consecutivo_ticket}</td>
