@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShieldCheck, LogOut, Clock, Menu, X, TrendingUp, Truck, Database, Search, Download, Calendar, Scale } from 'lucide-react';
+import { LayoutDashboard, ShieldCheck, LogOut, Clock, Menu, X, Search, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export default function DashboardSupervisor() {
@@ -39,10 +39,7 @@ export default function DashboardSupervisor() {
     setCargando(true);
     try {
       const token = localStorage.getItem('token');
-      if (!token) {
-        navigate('/');
-        return;
-      }
+      if (!token) return navigate('/');
 
       const respuesta = await fetch('https://senafim-api.onrender.com/api/pesajes', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -79,10 +76,7 @@ export default function DashboardSupervisor() {
 
   const exportarExcel = () => {
     const datosParaExportar = filtrarDatosPorTiempo(historialGlobal, filtroTiempo);
-    if (datosParaExportar.length === 0) {
-      alert("No hay datos para exportar.");
-      return;
-    }
+    if (datosParaExportar.length === 0) return alert("No hay datos para exportar.");
 
     const datosFormateados = datosParaExportar.map(item => ({
       "TICKET": item.consecutivo_ticket,
@@ -97,7 +91,6 @@ export default function DashboardSupervisor() {
     const worksheet = XLSX.utils.json_to_sheet(datosFormateados);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte");
-    // Nombre del archivo adaptado
     XLSX.writeFile(workbook, `Reporte_BetaArena_${filtroTiempo}.xlsx`);
   };
 
@@ -116,56 +109,65 @@ export default function DashboardSupervisor() {
 
   const datosBusqueda = historialGlobal.filter(item => 
     item.placa?.toLowerCase().includes(busqueda.toLowerCase()) ||
-    item.numero_guia?.toLowerCase().includes(busqueda.toLowerCase()) ||
     item.consecutivo_ticket?.toString().includes(busqueda)
   );
 
+  // Contenido del menú para no repetir código
+  const ContenidoMenu = () => (
+    <>
+      <div className="p-6 border-b border-indigo-900/30 flex justify-between items-center">
+        <img src="/assets/senafim-logo-blanco.png" alt="Beta Arena" className="h-8 object-contain" />
+        <button className="lg:hidden text-slate-400" onClick={() => setMenuAbierto(false)}>
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="p-4 flex-1 space-y-2">
+        <button onClick={() => {setVistaActiva('panel'); setMenuAbierto(false);}} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${vistaActiva === 'panel' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>
+          <LayoutDashboard className="w-5 h-5" /> <span>Métricas (KPIs)</span>
+        </button>
+        <button onClick={() => {setVistaActiva('auditoria'); setMenuAbierto(false);}} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${vistaActiva === 'auditoria' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>
+          <ShieldCheck className="w-5 h-5" /> <span>Auditoría</span>
+        </button>
+      </div>
+      <div className="p-4 border-t border-indigo-900/30">
+        <button onClick={handleCerrarSesion} className="w-full flex items-center justify-center space-x-2 bg-red-500/10 text-red-400 py-2.5 rounded-lg border border-red-500/20">
+          <LogOut className="w-4 h-4" /> <span>Salir</span>
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-[#050B14] font-sans text-slate-300 flex overflow-hidden">
+    // ESTRUCTURA INFALIBLE: Flexbox puro, 100vh de alto, 100vw de ancho.
+    <div className="flex h-screen w-full bg-[#050B14] font-sans text-slate-300 overflow-hidden">
       
-      {/* OVERLAY PARA MÓVILES */}
+      {/* 1. SIDEBAR MÓVIL (Completamente independiente, solo existe si menuAbierto es true) */}
       {menuAbierto && (
-        <div 
-          className="fixed inset-0 bg-black/60 z-30 lg:hidden backdrop-blur-sm" 
-          onClick={() => setMenuAbierto(false)} 
-        />
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          {/* Fondo oscuro que cierra el menú al hacer clic */}
+          <div className="fixed inset-0 bg-black/70" onClick={() => setMenuAbierto(false)}></div>
+          {/* Panel lateral móvil */}
+          <aside className="relative w-64 h-full bg-[#0A162C] flex flex-col shadow-2xl">
+            <ContenidoMenu />
+          </aside>
+        </div>
       )}
-      
-      {/* SIDEBAR: fixed en móvil, relative en PC para no solapar el contenido */}
-      <aside className={`fixed lg:relative z-40 w-64 h-screen flex-shrink-0 bg-[#0A162C]/95 backdrop-blur-xl border-r border-indigo-900/30 flex flex-col shadow-2xl transition-transform duration-300 ${menuAbierto ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <div className="p-6 border-b border-indigo-900/30 flex justify-between items-center">
-          {/* Logo actualizado al proyecto */}
-          <img src="/assets/senafim-logo-blanco.png" alt="Beta Arena" className="h-8 object-contain" />
-          <button className="lg:hidden text-slate-400 hover:text-white" onClick={() => setMenuAbierto(false)}>
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        
-        <div className="p-4 flex-1 space-y-2">
-          <button onClick={() => {setVistaActiva('panel'); setMenuAbierto(false);}} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${vistaActiva === 'panel' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>
-            <LayoutDashboard className="w-5 h-5" /> <span>Métricas (KPIs)</span>
-          </button>
-          <button onClick={() => {setVistaActiva('auditoria'); setMenuAbierto(false);}} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${vistaActiva === 'auditoria' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>
-            <ShieldCheck className="w-5 h-5" /> <span>Auditoría</span>
-          </button>
-        </div>
-        
-        <div className="p-4 border-t border-indigo-900/30">
-          <button onClick={handleCerrarSesion} className="w-full flex items-center justify-center space-x-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 py-2.5 rounded-lg border border-red-500/20 transition-colors">
-            <LogOut className="w-4 h-4" /> <span>Salir</span>
-          </button>
-        </div>
+
+      {/* 2. SIDEBAR COMPUTADORA (Siempre fijo a la izquierda, no se superpone) */}
+      <aside className="hidden lg:flex flex-col w-64 h-full bg-[#0A162C] border-r border-indigo-900/30 shrink-0">
+        <ContenidoMenu />
       </aside>
 
-      {/* CONTENIDO PRINCIPAL: flex-1 y min-w-0 para evitar desbordes en móvil */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
+      {/* 3. CONTENIDO PRINCIPAL (Ocupa el resto del espacio disponible) */}
+      <main className="flex-1 flex flex-col h-full min-w-0">
         
-        <header className="h-16 flex-shrink-0 bg-[#050B14]/80 border-b border-indigo-900/30 flex justify-between items-center px-4 md:px-8">
+        {/* Cabecera */}
+        <header className="h-16 shrink-0 bg-[#050B14] border-b border-indigo-900/30 flex justify-between items-center px-4 md:px-8">
           <div className="flex items-center gap-3">
             <button className="lg:hidden text-white bg-white/5 p-1.5 rounded-lg" onClick={() => setMenuAbierto(true)}>
               <Menu className="w-5 h-5" />
             </button>
-            <h1 className="text-sm md:text-xl font-bold text-white uppercase truncate">Módulo Supervisor</h1>
+            <h1 className="text-sm md:text-xl font-bold text-white uppercase">Módulo Supervisor</h1>
           </div>
           <div className="flex items-center space-x-2 bg-indigo-900/20 border border-indigo-500/20 px-3 py-1.5 rounded-lg">
             <Clock className="w-4 h-4 text-indigo-400" />
@@ -173,41 +175,42 @@ export default function DashboardSupervisor() {
           </div>
         </header>
 
-        <div className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar">
+        {/* Cuerpo con scroll propio */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {vistaActiva === 'panel' ? (
-            <div className="space-y-6 md:space-y-8 animate-fade-in">
+            <div className="space-y-6 md:space-y-8">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <h2 className="text-xl md:text-2xl font-bold text-white">Resumen Operativo</h2>
                 <div className="flex w-full sm:w-auto gap-2 sm:gap-3">
-                  <select value={filtroTiempo} onChange={(e) => setFiltroTiempo(e.target.value)} className="flex-1 sm:flex-none bg-[#0A162C] border border-indigo-500/30 text-white text-sm rounded-lg px-3 py-2 cursor-pointer outline-none">
+                  <select value={filtroTiempo} onChange={(e) => setFiltroTiempo(e.target.value)} className="flex-1 sm:flex-none bg-[#0A162C] border border-indigo-500/30 text-white text-sm rounded-lg px-3 py-2 outline-none">
                     <option value="diario">Hoy</option>
                     <option value="semanal">Últimos 7 Días</option>
                     <option value="mensual">Mes Actual</option>
                     <option value="historico">Histórico</option>
                   </select>
-                  <button onClick={exportarExcel} className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                  <button onClick={exportarExcel} className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg flex items-center justify-center gap-2">
                     <Download size={16} /> <span className="hidden sm:inline">Exportar</span>
                   </button>
                 </div>
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                <div className="bg-indigo-900/20 border border-indigo-500/30 p-5 md:p-6 rounded-2xl">
+                <div className="bg-indigo-900/20 border border-indigo-500/30 p-5 md:p-6 rounded-2xl relative overflow-hidden">
                   <h3 className="text-slate-400 text-xs md:text-sm uppercase font-bold mb-2">Total Toneladas</h3>
-                  <p className="text-3xl md:text-5xl font-black text-white">{metricas.totalToneladas}</p>
+                  <p className="text-3xl md:text-5xl font-black text-white relative z-10">{metricas.totalToneladas}</p>
                 </div>
-                <div className="bg-blue-900/20 border border-blue-500/30 p-5 md:p-6 rounded-2xl">
+                <div className="bg-blue-900/20 border border-blue-500/30 p-5 md:p-6 rounded-2xl relative overflow-hidden">
                   <h3 className="text-slate-400 text-xs md:text-sm uppercase font-bold mb-2">Total Viajes</h3>
-                  <p className="text-3xl md:text-5xl font-black text-white">{metricas.totalViajes}</p>
+                  <p className="text-3xl md:text-5xl font-black text-white relative z-10">{metricas.totalViajes}</p>
                 </div>
-                <div className="bg-emerald-900/20 border border-emerald-500/30 p-5 md:p-6 rounded-2xl sm:col-span-2 lg:col-span-1">
+                <div className="bg-emerald-900/20 border border-emerald-500/30 p-5 md:p-6 rounded-2xl sm:col-span-2 lg:col-span-1 relative overflow-hidden">
                   <h3 className="text-slate-400 text-xs md:text-sm uppercase font-bold mb-2">Promedio/Carga</h3>
-                  <p className="text-3xl md:text-5xl font-black text-white">{metricas.promedioCarga}</p>
+                  <p className="text-3xl md:text-5xl font-black text-white relative z-10">{metricas.promedioCarga}</p>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="bg-[#0A162C]/80 border border-white/10 rounded-2xl p-4 md:p-8 shadow-2xl h-full flex flex-col animate-fade-in">
+            <div className="bg-[#0A162C] border border-indigo-900/30 rounded-2xl p-4 md:p-6 flex flex-col h-full min-h-[400px]">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <h2 className="text-xl md:text-2xl font-bold text-white">Centro de Auditoría</h2>
                 <div className="w-full md:w-auto relative">
@@ -217,16 +220,15 @@ export default function DashboardSupervisor() {
                     placeholder="Buscar ticket o placa..." 
                     value={busqueda} 
                     onChange={(e) => setBusqueda(e.target.value)} 
-                    className="w-full md:w-64 bg-[#050B14] border border-white/10 text-white text-sm rounded-lg pl-9 pr-4 py-2.5 outline-none focus:border-indigo-500 transition-colors" 
+                    className="w-full md:w-64 bg-[#050B14] border border-white/10 text-white text-sm rounded-lg pl-9 pr-4 py-2.5 outline-none focus:border-indigo-500" 
                   />
                 </div>
               </div>
               
-              {/* TABLA CON SCROLL HORIZONTAL (Responsive) */}
-              <div className="overflow-x-auto flex-1 custom-scrollbar bg-[#050B14] rounded-xl border border-white/5">
+              <div className="overflow-x-auto flex-1 bg-[#050B14] rounded-xl border border-white/5">
                 <table className="w-full text-left min-w-[600px]">
                   <thead className="bg-[#0A162C] sticky top-0">
-                    <tr className="text-indigo-300 border-b border-indigo-900/30 uppercase text-[10px] md:text-xs tracking-wider">
+                    <tr className="text-indigo-300 border-b border-indigo-900/30 uppercase text-[10px] md:text-xs">
                       <th className="p-4 font-semibold">Ticket</th>
                       <th className="p-4 font-semibold">Fecha</th>
                       <th className="p-4 font-semibold">Placa</th>
@@ -236,7 +238,7 @@ export default function DashboardSupervisor() {
                   <tbody className="divide-y divide-white/5">
                     {datosBusqueda.length > 0 ? (
                       datosBusqueda.map((item) => (
-                        <tr key={item.id_registro} className="hover:bg-white/5 transition-colors text-xs md:text-sm">
+                        <tr key={item.id_registro} className="hover:bg-white/5 text-xs md:text-sm">
                           <td className="p-4 font-mono font-bold text-indigo-400">#{item.consecutivo_ticket}</td>
                           <td className="p-4 text-slate-400">{item.fecha_registro?.substring(0, 10)}</td>
                           <td className="p-4 font-bold text-white">{item.placa}</td>
