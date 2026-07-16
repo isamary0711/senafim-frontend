@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShieldCheck, LogOut, Clock, Menu, X, TrendingUp, Truck, Database, Search, Download, Calendar } from 'lucide-react';
+import { LayoutDashboard, ShieldCheck, LogOut, Clock, Menu, X, TrendingUp, Truck, Database, Search, Download, Calendar, Scale } from 'lucide-react';
 
 export default function DashboardSupervisor() {
   const navigate = useNavigate();
